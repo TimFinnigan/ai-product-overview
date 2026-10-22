@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Product Overview</title>
+<style>
+  :root {
+    --bg: #f5f5f4; --panel: #fff; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --hover: #f5f5f4; --accent: #1c1917;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e0d0c; --panel: #1a1817; --fg: #f5f5f4; --muted: #a8a29e; --line: #2e2b29; --hover: #242120; --accent: #f5f5f4; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .app { display: grid; grid-template-columns: 220px 1fr; gap: 12px; max-width: 1200px; margin: 0 auto; padding: 12px; min-height: 100vh; align-items: start; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+  aside { position: sticky; top: 12px; padding: 14px; }
+  h1 { font-size: 17px; margin: 0 0 10px; }
+  input[type=search] { width: 100%; padding: 7px 10px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  nav button { display: flex; justify-content: space-between; padding: 6px 10px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+  nav button:hover { background: var(--hover); }
+  nav button[aria-pressed=true] { background: var(--accent); color: var(--bg); }
+  nav .n { opacity: .55; }
+  .star { display: block; margin-top: 12px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; text-align: center; text-decoration: none; color: var(--fg); font-weight: 600; }
+  .star:hover { background: var(--hover); }
+  .star span { color: #e3b341; }
+  .hint { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+  main { padding: 6px 14px 14px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 14px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
+  a.tile { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 10px; text-decoration: none; color: inherit; }
+  a.tile[href]:hover, a.tile[href]:focus-visible { background: var(--hover); }
+  .icon { flex: none; width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-size: 22px; font-weight: 700; overflow: hidden; border: 1px solid var(--line); background: #fff; }
+  .icon img { width: 100%; height: 100%; object-fit: cover; }
+  .name { font-weight: 600; }
+  .maker { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 4px; }
+  .tag { color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .empty { color: var(--muted); padding: 20px 0; }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    aside { position: static; }
+    nav { flex-direction: row; flex-wrap: wrap; }
+    nav button { gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <h1>AI Product Overview</h1>
+    <input type="search" id="q" placeholder="Search" aria-label="Search apps">
+    <nav id="nav"></nav>
+    <a class="star" href="https://github.com/TimFinnigan/ai-product-overview" target="_blank" rel="noopener"><span>★</span> Star this repo</a>
+    <p class="hint">Edit <code>apps.js</code> to add apps.</p>
+  </aside>
+  <main class="panel" id="shelves"></main>
+</div>
+<script src="apps.js"></script>
+<script>
+  const apps = window.APPS;
+  const nav = document.getElementById("nav");
+  const shelvesEl = document.getElementById("shelves");
+  const q = document.getElementById("q");
+  const categories = [...new Set(apps.map(a => a.category))];
+  let active = "All";
+
+  const slug = n => n.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+  function color(name) {
+    let h = 0;
+    for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+    return `hsl(${h} 55% 45%)`;
+  }
+
+  function tile(a) {
+    const el = document.createElement("a");
+    el.className = "tile";
+    if (a.url) { el.href = a.url; el.target = "_blank"; el.rel = "noopener"; }
+    const icon = document.createElement("div");
+    icon.className = "icon";
+    const letter = () => {
+      icon.replaceChildren();
+      icon.style.background = color(a.name);
+      icon.textContent = a.name[0].toUpperCase();
+    };
+    const src = a.logo || (a.url && `logos/${slug(a.name)}.png`);
+    if (src) {
+      const img = document.createElement("img");
+      img.src = src; img.alt = ""; img.onerror = letter;
+      icon.appendChild(img);
+    } else {
+      letter();
+    }
+    const text = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "name"; name.textContent = a.name;
+    if (a.maker) {
+      const m = document.createElement("span");
+      m.className = "maker"; m.textContent = a.maker;
+      name.appendChild(m);
+    }
+    const tag = document.createElement("div");
+    tag.className = "tag"; tag.textContent = a.tagline || "";
+    text.append(name, tag);
+    el.append(icon, text);
+    return el;
+  }
+
+  function matches(a, term) {
+    return !term || [a.name, a.maker, a.tagline, a.category].join(" ").toLowerCase().includes(term);
+  }
+
+  function render() {
+    const term = q.value.trim().toLowerCase();
+    shelvesEl.replaceChildren();
+    let shown = 0;
+    for (const cat of categories) {
+      if (active !== "All" && active !== cat) continue;
+      const list = apps.filter(a => a.category === cat && matches(a, term));
+      if (!list.length) continue;
+      shown += list.length;
+      const h = document.createElement("h2"); h.textContent = cat;
+      const grid = document.createElement("div"); grid.className = "grid";
+      list.forEach(a => grid.appendChild(tile(a)));
+      shelvesEl.append(h, grid);
+    }
+    if (!shown) shelvesEl.innerHTML = '<p class="empty">No matches.</p>';
+    nav.querySelectorAll("button").forEach(b => {
+      b.setAttribute("aria-pressed", b.dataset.cat === active);
+      const c = b.dataset.cat;
+      b.querySelector(".n").textContent = apps.filter(a => (c === "All" || a.category === c) && matches(a, term)).length;
+    });
+  }
+
+  ["All", ...categories].forEach(c => {
+    const b = document.createElement("button");
+    b.dataset.cat = c;
+    b.innerHTML = '<span></span><span class="n"></span>';
+    b.firstChild.textContent = c;
+    b.onclick = () => { active = c; render(); };
+    nav.appendChild(b);
+  });
+  q.addEventListener("input", render);
+  render();
+</script>
+</body>
+</html>
