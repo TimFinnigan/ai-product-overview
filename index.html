@@ -37,6 +37,8 @@
   .name { font-weight: 600; }
   .maker { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 4px; }
   .tag { color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .group { margin-top: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+  .group-title { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px 8px; }
   .empty { color: var(--muted); padding: 20px 0; }
   @media (max-width: 720px) {
     .app { grid-template-columns: 1fr; }
@@ -122,9 +124,21 @@
       if (!list.length) continue;
       shown += list.length;
       const h = document.createElement("h2"); h.textContent = cat;
+      const count = {};
+      list.forEach(a => count[a.maker] = (count[a.maker] || 0) + 1);
+      const grouped = a => a.maker && a.maker !== "Open source" && count[a.maker] > 1;
       const grid = document.createElement("div"); grid.className = "grid";
-      list.forEach(a => grid.appendChild(tile(a)));
-      shelvesEl.append(h, grid);
+      list.filter(a => !grouped(a)).forEach(a => grid.appendChild(tile(a)));
+      shelvesEl.append(h);
+      if (grid.children.length) shelvesEl.append(grid);
+      [...new Set(list.filter(grouped).map(a => a.maker))].forEach(maker => {
+        const box = document.createElement("section"); box.className = "group";
+        const t = document.createElement("div"); t.className = "group-title"; t.textContent = maker;
+        const g = document.createElement("div"); g.className = "grid";
+        list.filter(a => a.maker === maker).forEach(a => g.appendChild(tile(a)));
+        box.append(t, g);
+        shelvesEl.append(box);
+      });
     }
     if (!shown) shelvesEl.innerHTML = '<p class="empty">No matches.</p>';
     nav.querySelectorAll("button").forEach(b => {
