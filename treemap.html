@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Source AI Treemap</title>
+<style>
+  :root {
+    --bg: #f5f5f4; --panel: #fff; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --hover: #f5f5f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e0d0c; --panel: #1a1817; --fg: #f5f5f4; --muted: #a8a29e; --line: #2e2b29; --hover: #242120; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  h1 { font-size: 17px; margin: 0; }
+  .sub { color: var(--muted); font-size: 12px; }
+  a { color: inherit; }
+  #map { position: relative; width: 100%; height: 76vh; min-height: 480px; }
+  .group { position: absolute; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); overflow: hidden; }
+  .group-title { position: absolute; left: 8px; top: 4px; right: 8px; font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  a.cell { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); text-decoration: none; overflow: hidden; text-align: center; }
+  a.cell:hover, a.cell:focus-visible { background: var(--hover); outline: 2px solid var(--fg); outline-offset: -2px; z-index: 1; }
+  a.cell img, a.cell .letter { border-radius: 22%; object-fit: cover; flex: none; border: 1px solid var(--line); }
+  a.cell .letter { display: grid; place-items: center; color: #fff; font-weight: 700; }
+  .nm { font-weight: 600; font-size: 12px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st { color: var(--muted); font-size: 11px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <header>
+      <h1>Open Source AI Treemap</h1>
+      <span class="sub"><a href="index.html">Back to catalog</a></span>
+    </header>
+    <div id="map"></div>
+    <p class="hint" id="hint"></p>
+  </div>
+</div>
+<script src="apps.js"></script>
+<script src="stars.js"></script>
+<script>
+  const slug = n => n.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const fmt = n => n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, "") + "k" : String(n);
+  const map = document.getElementById("map");
+
+  function color(name) {
+    let h = 0;
+    for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+    return `hsl(${h} 55% 45%)`;
+  }
+
+  // Group the apps that have star data by maker. Makers that are placeholders get one group per app.
+  const byMaker = new Map();
+  for (const a of window.APPS) {
+    const s = window.STARS[a.name];
+    if (!s) continue;
+    const key = a.maker === "Open source" ? a.name : a.maker;
+    if (!byMaker.has(key)) byMaker.set(key, []);
+    byMaker.get(key).push({ ...a, stars: s.stars, repo: s.repo, value: s.stars });
+  }
+  const groups = [...byMaker].map(([name, items]) => ({
+    name, items: items.sort((x, y) => y.value - x.value), value: items.reduce((t, i) => t + i.value, 0)
+  })).sort((x, y) => y.value - x.value);
+
+  // Squarified treemap. Items are {value}, rect is {x, y, w, h}. Sets item.rect on each.
+  function squarify(items, rect) {
+    const total = items.reduce((t, i) => t + i.value, 0);
+    const scale = rect.w * rect.h / total;
+    let { x, y, w, h } = rect;
+    let row = [], rest = items.slice();
+    const worst = (r, side) => {
+      const sum = r.reduce((t, i) => t + i.value * scale, 0);
+      const max = Math.max(...r.map(i => i.value * scale)), min = Math.min(...r.map(i => i.value * scale));
+      return Math.max(side * side * max / (sum * sum), sum * sum / (side * side * min));
+    };
+    const place = () => {
+      const side = Math.min(w, h);
+      const sum = row.reduce((t, i) => t + i.value * scale, 0);
+      const thick = sum / side;
+      let off = 0;
+      for (const i of row) {
+        const len = i.value * scale / thick;
+        i.rect = w >= h ? { x, y: y + off, w: thick, h: len } : { x: x + off, y, w: len, h: thick };
+        off += len;
+      }
+      if (w >= h) { x += thick; w -= thick; } else { y += thick; h -= thick; }
+      row = [];
+    };
+    while (rest.length) {
+      const next = rest[0];
+      const side = Math.min(w, h);
+      if (!row.length || worst([...row, next], side) <= worst(row, side)) { row.push(next); rest.shift(); }
+      else place();
+    }
+    if (row.length) place();
+  }
+
+  function cell(a, r) {
+    const el = document.createElement("a");
+    el.className = "cell";
+    el.href = "https://github.com/" + a.repo; el.target = "_blank"; el.rel = "noopener";
+    el.title = `${a.name} (${a.maker}): ${a.stars.toLocaleString()} stars on ${a.repo}`;
+    Object.assign(el.style, { left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px" });
+    const small = Math.min(r.w, r.h);
+    const size = Math.max(0, Math.min(small * 0.55, 220));
+    if (small >= 22) {
+      const box = Math.min(small - 8, size || small - 8);
+      const letter = () => {
+        const d = document.createElement("div");
+        d.className = "letter"; d.textContent = a.name[0].toUpperCase();
+        Object.assign(d.style, { width: box + "px", height: box + "px", background: color(a.name), fontSize: box * 0.45 + "px" });
+        img.replaceWith(d);
+      };
+      const img = document.createElement("img");
+      img.src = `logos/${slug(a.name)}.png`; img.alt = "";
+      img.style.width = img.style.height = box + "px";
+      img.onerror = letter;
+      el.append(img);
+    }
+    if (r.w >= 64 && r.h >= size + 34) {
+      const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = a.name;
+      el.append(nm);
+      if (r.h >= size + 52) {
+        const st = document.createElement("div"); st.className = "st"; st.textContent = "★ " + fmt(a.stars);
+        el.append(st);
+      }
+    }
+    return el;
+  }
+
+  function render() {
+    map.replaceChildren();
+    const W = map.clientWidth, H = map.clientHeight;
+    squarify(groups, { x: 0, y: 0, w: W, h: H });
+    const gap = 3;
+    for (const g of groups) {
+      const r = g.rect;
+      const box = document.createElement("div");
+      box.className = "group";
+      Object.assign(box.style, { left: r.x + gap / 2 + "px", top: r.y + gap / 2 + "px", width: r.w - gap + "px", height: r.h - gap + "px" });
+      const solo = g.items.length === 1 && g.items[0].name === g.name;
+      const head = !solo && r.w >= 70 && r.h >= 60 ? 22 : 0;
+      if (head) {
+        const t = document.createElement("div"); t.className = "group-title";
+        t.textContent = g.name;
+        box.append(t);
+      }
+      const inner = { x: 4, y: head || 4, w: r.w - gap - 8, h: r.h - gap - (head || 4) - 4 };
+      if (inner.w > 4 && inner.h > 4) {
+        squarify(g.items, inner);
+        for (const a of g.items) {
+          const c = a.rect;
+          box.append(cell(a, { x: c.x + 1, y: c.y + 1, w: Math.max(0, c.w - 2), h: Math.max(0, c.h - 2) }));
+        }
+      }
+      map.append(box);
+    }
+    document.getElementById("hint").textContent =
+      `Open source projects only, sized by GitHub stars. ${groups.reduce((t, g) => t + g.items.length, 0)} projects. Closed products have no repo, so they are not shown. Refresh the numbers with fetch_stars.py.`;
+  }
+
+  let t;
+  addEventListener("resize", () => { clearTimeout(t); t = setTimeout(render, 80); });
+  render();
+</script>
+</body>
+</html>
